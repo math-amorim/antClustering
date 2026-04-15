@@ -7,11 +7,14 @@ using namespace std;
 
 struct Item {
     bool exists = false;
+    vector<double> features; // tamanho e peso
+    int label = -1;
 };
 
 struct Ant {
     int x, y;
     bool carrying = false;
+    Item carriedItem;
 };
 
 class AntClustering {
@@ -20,7 +23,15 @@ private:
     int numItems;
     int numAnts;
     int radious = 1;
-    int k1 = 0.3, k2 = 0.3;
+    double alpha = 0.3;
+    double k1 = 0.1, k2 = 0.3;
+
+    vector<vector<double>> centers = {
+        {0.2, 0.2},
+        {0.8, 0.2},
+        {0.2, 0.8},
+        {0.8, 0.8}
+    };
 
     vector<vector<Item>> grid;
     vector<vector<bool>> antGrid;
@@ -85,8 +96,19 @@ private:
         while(placed < numItems) {
             int x = randInt(0, rows-1);
             int y = randInt(0, cols-1);
+
             if(!grid[x][y].exists) {
+                int c = randInt(0, 3);
+                double noise = 0.05;
+
                 grid[x][y].exists = true;
+
+                grid[x][y].features = { 
+                    centers[c][0] + noise * randDouble(),
+                    centers[c][1] + noise * randDouble()
+                };
+
+                grid[x][y].label = c;
                 placed++;
             }
         }
@@ -139,30 +161,64 @@ private:
         return cnt;
     }
 
-    double pickProbability(int ant_items) {
-        double f = ant_items/8.0;
+    double pickProbability(double f) {
         return pow(k1/(k1 + f), 2);
     }
 
-    double dropProbability(int ant_items) {
-        double f = ant_items/8.0;
+    double dropProbability(double f) {
         return pow(f/(k2 + f), 2);
     }
 
-    void act(Ant &ant) {
-        int ant_items = countItemsAround(ant.x, ant.y);
+    double euclidean(const vector<double>& a, const vector<double>& b) {
+        double sum = 0;
+        for (int i = 0; i < a.size(); i++) {
+            sum += (a[i] - b[i]) * (a[i] - b[i]);
+        }
+        return sqrt(sum);
+    }
 
+    double similarity(int x, int y, const Item& item) {
+        double sum = 0;
+        int count = 0;
+
+        for (int dx = -radious; dx <= radious; dx++) {
+            for (int dy = -radious; dy <= radious; dy++) {
+                if (dx == 0 && dy == 0) continue;
+
+                int nx = wrap(x + dx, rows);
+                int ny = wrap(y + dy, cols);
+
+                if (grid[nx][ny].exists) {
+                    double d = euclidean(item.features, grid[nx][ny].features);
+
+                    sum += max(0.0, 1 - (d / alpha));
+                    count++;
+                }
+            }
+        }
+
+        if (count == 0) return 0;
+        return sum / count;
+    }
+
+    void act(Ant &ant) {
         if(!ant.carrying) {
-            if(grid[ant.x][ant.y].exists) {
-                if(randDouble() < pickProbability(ant_items)) {
+            if (grid[ant.x][ant.y].exists) {
+                Item item = grid[ant.x][ant.y];
+                double f = similarity(ant.x, ant.y, item);
+
+                if(randDouble() < pickProbability(f)) {
+                    ant.carriedItem = item;
                     grid[ant.x][ant.y].exists = false;
                     ant.carrying = true;
                 }
             }
         }else {
             if(!grid[ant.x][ant.y].exists) {
-                if(randDouble() < dropProbability(ant_items)) {
-                    grid[ant.x][ant.y].exists = true;
+                double f = similarity(ant.x, ant.y, ant.carriedItem);
+
+                if(randDouble() < dropProbability(f)) {
+                    grid[ant.x][ant.y] = ant.carriedItem;
                     ant.carrying = false;
                 }
             }
@@ -173,11 +229,11 @@ void draw(int step, bool clear = false) {
     if (clear) {
         cout << "\033[2J\033[1;1H";
     }
-        vector<string> view(rows, string(cols, '.'));
+        vector<string> view(rows, string(cols, ' '));
 
         for(int i = 0; i < rows; i++) {
             for(int j = 0; j < cols; j++) {
-                if(grid[i][j].exists) view[i][j] = 'o';
+                if(grid[i][j].exists) view[i][j] = '0' + grid[i][j].label;
             }
         }
 
@@ -201,11 +257,11 @@ void draw(int step, bool clear = false) {
 int main() {
     cin.tie(0)->sync_with_stdio(0);
 
-    AntClustering antC(20, 40, 120, 15);
+    AntClustering antC(64, 64, 400, 100);
     // Para rodar sem visualização, use: antC.run(numero_de_passos);
     // Para rodar com visualização, use: antC.run(numero_de_passos, true, delay_em_milisegundos);
 
-    antC.run(10000);
+    antC.run(20000);
 
     return 0;
 }
