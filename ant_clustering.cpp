@@ -22,8 +22,8 @@ private:
     int rows, cols;
     int numItems;
     int numAnts;
-    int radious = 1;
-    double alpha = 0.3;
+    int radious = 2;
+    double alpha =  5.0;
     double k1 = 0.1, k2 = 0.3;
 
     vector<vector<double>> centers = {
@@ -45,8 +45,9 @@ public:
 
         grid.assign(rows, vector<Item>(cols));
         antGrid.assign(rows, vector<bool>(cols, false));
-
-        placeItems();
+        if (!loadItems()) {
+            placeItems();
+        }
         placeAnts();
     }
 
@@ -112,6 +113,60 @@ private:
                 placed++;
             }
         }
+    }
+
+    bool loadItems() {
+        vector<Item> items;
+        string line;
+        
+        if (cin.rdbuf()->in_avail() == 0) {
+            return false; 
+        }
+
+        while (getline(cin, line)) {
+            line.erase(0, line.find_first_not_of(" \t"));
+            if (line.empty() || line[0] == '#') continue;
+
+            // troca vírgula por ponto
+            for (char &c : line) {
+                if (c == ',') c = '.';
+            }
+
+            stringstream ss(line);
+            double x, y;
+            int label;
+
+            if (ss >> x >> y >> label) {
+                Item it;
+                it.exists = true;
+                it.features = {x, y};
+                it.label = label - 1;
+                items.push_back(it);
+            }
+        }
+
+        if (items.empty()) {
+            return false; 
+        }
+
+        numItems = items.size();
+
+        if (numItems == 0) {
+            cerr << "ERRO: nenhum item carregado\n";
+            exit(1);
+        }
+
+        int placed = 0;
+        while (placed < numItems) {
+            int gx = randInt(0, rows-1);
+            int gy = randInt(0, cols-1);
+
+            if (!grid[gx][gy].exists) {
+                grid[gx][gy] = items[placed];
+                placed++;
+            }
+        }
+        return true;
     }
 
     void placeAnts() {
@@ -192,12 +247,11 @@ private:
                     double d = euclidean(item.features, grid[nx][ny].features);
 
                     sum += max(0.0, 1 - (d / alpha));
-                    count++;
                 }
+                count++;
             }
         }
 
-        if (count == 0) return 0;
         return sum / count;
     }
 
@@ -233,11 +287,11 @@ void draw(int step, bool clear = false) {
 
         for(int i = 0; i < rows; i++) {
             for(int j = 0; j < cols; j++) {
-                if(grid[i][j].exists) view[i][j] = '0' + grid[i][j].label;
+                if(grid[i][j].exists) view[i][j] = 'A' + grid[i][j].label;
             }
         }
 
-        for(auto &ant : ants) view[ant.x][ant.y] = ant.carrying ? 'A' : 'a';
+        for(auto &ant : ants) view[ant.x][ant.y] = ant.carrying ? '*' : '.';
 
         string output;
         output += "Iteracao: " + to_string(step) + "\n\n";
@@ -257,11 +311,13 @@ void draw(int step, bool clear = false) {
 int main() {
     cin.tie(0)->sync_with_stdio(0);
 
-    AntClustering antC(64, 64, 400, 100);
-    // Para rodar sem visualização, use: antC.run(numero_de_passos);
-    // Para rodar com visualização, use: antC.run(numero_de_passos, true, delay_em_milisegundos);
+    // Construtor recebe número de linhas, colunas, itens e formigas, respectivamente.
+    AntClustering antC(64, 64, 400, 80);
 
-    antC.run(20000);
+    // Para rodar sem visualização de cada iteração, use: antC.run(numero_de_passos);
+    antC.run(5000000);
+    // Para rodar com visualização de cada iteração, use: antC.run(numero_de_passos, true, delay_em_milisegundos);
+    // antC.run(200000, true, 50);
 
     return 0;
 }
